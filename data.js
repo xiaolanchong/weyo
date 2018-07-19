@@ -4,13 +4,14 @@ var rcxData = {
 	kanjiPos: 0,
 	dicList: [],
 
-	loadConfig: function() {
+	loadConfig: function(rcxConfig) {
 		let reinit = false;
 
 		if (this.ready) {
 			this.done();
 			reinit = true;
 		}
+		this.rcxConfig = rcxConfig;
 
 		if (typeof(rcxDicList) == 'undefined') {
 			rcxDicList = {};
@@ -87,7 +88,7 @@ var rcxData = {
 		if (this.ready) return;
 
 		this.kanjiShown = {};
-		let a = rcxConfig.kindex.split(',');
+		let a = this.rcxConfig.kindex.split(',');
 		for (let i = a.length - 1; i >= 0; --i) {
 			this.kanjiShown[a[i]] = 1;
 		}
@@ -327,11 +328,11 @@ var rcxData = {
 		var maxTrim;
 
 		if (dic.isName) {
-			maxTrim = rcxConfig.namax;
+			maxTrim = this.rcxConfig.namax;
 			result.names = 1;
 		}
 		else {
-			maxTrim = rcxConfig.wmax;
+			maxTrim = this.rcxConfig.wmax;
 		}
 
 
@@ -375,7 +376,7 @@ var rcxData = {
 						}
 						ok = (z != -1);
 					}
-					if ((ok) && (dic.hasType) && (rcxConfig.hidex)) {
+					if ((ok) && (dic.hasType) && (this.rcxConfig.hidex)) {
 						if (dentry.match(/\/\([^\)]*\bX\b.*?\)/)) ok = false;
 					}
 					if (ok) {
@@ -606,7 +607,7 @@ var rcxData = {
 			b.push('<table class="k-main-tb"><tr><td valign="top">');
 			b.push(box);
 			b.push('<span class="k-kanji">' + entry.kanji + '</span><br/>');
-			if (!rcxConfig.hidedef) b.push('<div class="k-eigo">' + entry.eigo + '</div>');
+			if (!this.rcxConfig.hidedef) b.push('<div class="k-eigo">' + entry.eigo + '</div>');
 			b.push('<div class="k-yomi">' + yomi + '</div>');
 			b.push('</td></tr><tr><td>' + nums + '</td></tr></table>');
 			return b.join('');
@@ -631,7 +632,7 @@ var rcxData = {
 					else c.push('<span class="w-kana">' + e[1] + '</span><br/> ');
 
 				s = e[3];
-				if (rcxConfig.hidedef) t = '';
+				if (this.rcxConfig.hidedef) t = '';
 					else t = '<span class="w-def">' + s.replace(/\//g, '; ').replace(/\n/g, '<br/>') + '</span><br/>';
 			}
 			c.push(t);
@@ -698,7 +699,7 @@ var rcxData = {
 				b.push(k);
 
         // Add pitch accent right after the reading
-        if (rcxConfig.showpitchaccent)
+        if (this.rcxConfig.showpitchaccent)
         {
           var pitchAccent = rcxMain.getPitchAccent(e[1], e[2]);
 
@@ -711,7 +712,7 @@ var rcxData = {
 				if (entry.data[i][1]) b.push(' <span class="w-conj">(' + entry.data[i][1] + ')</span>');
 
         // Add frequency
-        if(rcxConfig.showfreq)
+        if(this.rcxConfig.showfreq)
         {
           var freqExpression = e[1];
           var freqReading = e[2];
@@ -731,13 +732,13 @@ var rcxData = {
         }
 
 				s = e[3];
-				if (rcxConfig.hidedef) {
+				if (this.rcxConfig.hidedef) {
 					t = '<br/>';
 				}
 				else {
 					t = s.replace(/\//g, '; ');
-					if (!rcxConfig.wpos) t = t.replace(/^\([^)]+\)\s*/, '');
-					if (!rcxConfig.wpop) t = t.replace('; (P)', '');
+					if (!this.rcxConfig.wpos) t = t.replace(/^\([^)]+\)\s*/, '');
+					if (!this.rcxConfig.wpop) t = t.replace('; (P)', '');
 					t = t.replace(/\n/g, '<br/>');
 					t = '<br/><span class="w-def">' + t + '</span><br/>';
 				}
@@ -808,7 +809,7 @@ var rcxData = {
       reading = dictForm;
     }
 
-    var ankiTags = rcxMain.trim(rcxConfig.atags);
+    var ankiTags = rcxMain.trim(this.rcxConfig.atags);
 
     var audioFile = reading + ' - ' + entryData[1] + '.mp3';
 
@@ -819,11 +820,11 @@ var rcxData = {
       translation = entryData[3];
       
       // Remove text that matches the user's regex
-      if((rcxConfig.epwingremoveregex != '')
-        && rcxConfig.epwing_apply_remove_regex_when_saving)
+      if((this.rcxConfig.epwingremoveregex != '')
+        && this.rcxConfig.epwing_apply_remove_regex_when_saving)
       {
         // Get the user regex
-        var userRegex = new RegExp(rcxConfig.epwingremoveregex, "g");
+        var userRegex = new RegExp(this.rcxConfig.epwingremoveregex, "g");
         
         // Convert <br /> to linefeed
         var translationWithLinefeeds = translation.replace(/<br \/>/g, "\n");
@@ -848,13 +849,13 @@ var rcxData = {
       translation = entryData[3].replace(/\//g, "; ");
 
       // Remove word type indicators? [example: (v1,n)]
-      if(!rcxConfig.wpos)
+      if(!this.rcxConfig.wpos)
       {
         translation = translation.replace(/^\([^)]+\)\s*/, '');
       }
 
       // Remove popular indicator? [example: (P)]
-      if(!rcxConfig.wpop)
+      if(!this.rcxConfig.wpop)
       {
         translation = translation.replace('; (P)', '');
       }
@@ -874,7 +875,7 @@ var rcxData = {
     saveText = saveText.replace(/\$d/g, dictForm);              // Dictionary form (expression)
     saveText = saveText.replace(/\$h/g, word);                  // Highlighted Word
     saveText = saveText.replace(/\$r/g, reading);               // Reading (kana)
-    saveText = saveText.replace(/\$o/g, rcxConfig.savenotes);   // Notes
+    saveText = saveText.replace(/\$o/g, this.rcxConfig.savenotes);   // Notes
     saveText = saveText.replace(/\$s/g, sentence);              // Sentence
     saveText = saveText.replace(/\$b/g, sentenceWBlank);        // Sentence with blank
     saveText = saveText.replace(/\$u/g, content.location.href); // Source URL
