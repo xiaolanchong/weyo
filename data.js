@@ -1,39 +1,4 @@
-﻿/*
-
-	Rikaichan
-	Copyright (C) 2005-2015 Jonathan Zarate
-	http://www.polarcloud.com/
-
-	---
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
-
-	---
-
-	Please do not change or remove any of the copyrights or links to web pages
-	when modifying any of the files.
-
-*/
-
-/*
-  Rikaisama
-  Author:  Christopher Brochtrup
-  Contact: cb4960@gmail.com
-  Website: http://rikaisama.sourceforge.net/
-*/
-
+﻿
 var rcxData = {
 	ready: false,
 	kanjiPos: 0,
@@ -114,29 +79,6 @@ var rcxData = {
 			window.openDialog('chrome://rikaichan/content/options.xul', '', 'chrome,centerscreen,resizable', 'dic');
 		}
 
-		// FF 3.7a workaround; @@ revisit later
-		if (!rcxData.dicPath) {
-			/*
-			rcxData.dicPath = { ready: false };
-			try {
-				Components.utils.import('resource://gre/modules/AddonManager.jsm');
-				// ! asynchronous
-				AddonManager.getAddonsByIDs(ids, function(addons) {
-					for (let i = 0; i < addons.length; ++i) {
-						let a = addons[i];
-						rcxData.dicPath[a.id] = a.getResourceURI('install.rdf')
-								.QueryInterface(Components.interfaces.nsIFileURL)
-								.file.parent.path;
-						//	alert(a.id + ': path=' + rcxData.dicPath[a.id]);
-					}
-					rcxData.dicPath.ready = true;
-					rcxMain.rcxObs.notifyState('dready');
-				});
-				return;
-			}
-			catch (ex) { }
-			rcxData.dicPath.ready = true; */
-		}
 
 		if (reinit) this.init();
 	},
@@ -478,111 +420,6 @@ var rcxData = {
 				if (e) {
 					if (ds != 0) e.title = dic.name;
 					return e;
-				}
-			}
-			this.searchSkipped++;
-			ds = (ds + 1) % this.dicList.length;
-		} while (ds != this.selected);
-		return null;
-	},
-
-	translate: function(text) {
-		var result = { data: [], textLen: text.length };
-		while (text.length > 0) {
-			var e = null;
-			var ds = this.selected;
-			do {
-				if (!this.dicList[ds].isKanji) {
-					e = this._wordSearch(text, this.dicList[ds], 1);
-					if (e != null) break;
-				}
-				ds = (ds + 1) % this.dicList.length;
-			} while (ds != this.selected);
-
-			if (e != null) {
-				if (result.data.length >= rcxConfig.wmax) {
-					result.more = 1;
-					break;
-				}
-				result.data.push(e.data[0]);
-				text = text.substr(e.matchLen);
-			}
-			else {
-				text = text.substr(1);
-			}
-		}
-		this.searchSkipped = (this.selected == this.kanjiPos) ? 1 : 0;
-		if (result.data.length == 0) return null;
-		result.textLen -= text.length;
-		return result;
-	},
-
-	textSearch: function(text) {
-		this.searchSkipped = 0;
-		if (!this.ready) this.init();
-		text = text.toLowerCase();
-		let ds = this.selected;
-		do {
-			let dic = this.dicList[ds];
-			if (!dic.isKanji) {
-				let result = { data: [], reason: [], kanji: 0, more: 0, names: dic.isName };
-
-				let r = dic.findText(text);
-
-				// try priorizing
-				let list = [];
-				let sW = /[\sW]/;
-				let slashText = '/' + text + '/';
-				for (let i = 0; i < r.length; ++i) {
-					let t = r[i].replace(/\(.+?\)/g, '').toLowerCase();
-
-					// closer to the beginning = better
-					let d = t.indexOf(text);
-					if (d >= 0) {
-						// the exact text within an entry = best
-						if (t.replace(/\s+/g, '').indexOf(slashText) != -1) {
-							d -= 100;
-						}
-						// a word within an entry = better
-						else if (((d == 0) || (sW.test(t.substr(d - 1, 1)))) &&
-								(((d + text.length) >= t.length) || (sW.test(t.substr(d + text.length, 1))))) {
-							d -= 50;
-						}
-					}
-					else d = 9999;
-					list.push({ rank: d, text: r[i] });
-				}
-
-				let max = dic.isName ? rcxConfig.namax : rcxConfig.wmax;
-				list.sort(function(a, b) { return a.rank - b.rank });
-				for (let i = 0; i < list.length; ++i) {
-					if (result.data.length >= max) {
-						result.more = 1;
-						break;
-					}
-					//	result.data.push([list[i].text + '[' + list[i].rank + ']/', null]);
-					result.data.push([list[i].text, null]);
-				}
-
-				/*
-				let j = (list.length > 100) ? 100 : list.length;
-				for (let i = 0; i < j; ++i) {
-					rcxDebug.echo(i + ': [' + list[i].rank + '] ' + list[i].text);
-				}*/
-
-				/*
-				for (let i = 0; i < r.length; ++i) {
-					if (result.data.length >= max) {
-						result.more = 1;
-						break;
-					}
-					result.data.push([r[i], null]);
-				}
-				*/
-
-				if (result.data.length) {
-					if (ds != 0) result.title = dic.name;
-					return result;
 				}
 			}
 			this.searchSkipped++;
@@ -1079,26 +916,6 @@ var rcxData = {
 var rcxFile = {
 	read: function(uri) {
 		return '';
-		/*
-		var inp = Components.classes['@mozilla.org/network/io-service;1']
-				.getService(Components.interfaces.nsIIOService)
-				.newChannel(uri, null, null)
-				.open();
-
-		var is = Components.classes['@mozilla.org/intl/converter-input-stream;1']
-					.createInstance(Components.interfaces.nsIConverterInputStream);
-		is.init(inp, 'UTF-8', 4 * 1024 * 1024,
-			Components.interfaces.nsIConverterInputStream.DEFAULT_REPLACEMENT_CHARACTER);
-
-		var buffer = '';
-		var s = {};
-		while (is.readString(-1, s) > 0) {
-			buffer += s.value;
-		}
-		is.close();
-
-		return buffer;
-		*/
 	},
 
 	readArray: function(name) {

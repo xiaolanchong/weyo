@@ -1,241 +1,357 @@
-﻿/*
+﻿
+const 	inlineNames = {
+		// text node
+		'#text': true,
 
-	Rikaichan
-	Copyright (C) 2005-2015 Jonathan Zarate
-	http://www.polarcloud.com/
+		// font style
+		'FONT': true,
+		'TT': true,
+		'I' : true,
+		'B' : true,
+		'BIG' : true,
+		'SMALL' : true,
+		//deprecated
+		'STRIKE': true,
+		'S': true,
+		'U': true,
 
-	---
+		// phrase
+		'EM': true,
+		'STRONG': true,
+		'DFN': true,
+		'CODE': true,
+		'SAMP': true,
+		'KBD': true,
+		'VAR': true,
+		'CITE': true,
+		'ABBR': true,
+		'ACRONYM': true,
 
-	Originally based on RikaiXUL 0.4 by Todd Rudick
-	http://www.rikai.com/
-	http://rikaixul.mozdev.org/
+		// special, not included IMG, OBJECT, BR, SCRIPT, MAP, BDO
+		'A': true,
+		'Q': true,
+		'SUB': true,
+		'SUP': true,
+		'SPAN': true,
+		'WBR': true,
 
-	---
+		// ruby
+		'RUBY': true,
+		'RBC': true,
+		'RTC': true,
+		'RB': true,
+		'RT': true,
+		'RP': true,
 
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
+    // User configurable elements
+    'DIV': false,
+	};
+	
+const textUtils = {
+	// Gets text from a node and returns it
+	// node: a node
+	// selEnd: the selection end object will be changed as a side effect
+	// maxLength: the maximum length of returned string
+	getInlineText: function (node, selEndList, maxLength) {
+		if ((node.nodeType == Node.TEXT_NODE) && (node.data.length == 0)) return ''
 
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
+		let text = '';
+		let result = node.ownerDocument.evaluate('descendant-or-self::text()[not(parent::rp) and not(ancestor::rt)]',
+						node, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+		while ((maxLength > 0) && (node = result.iterateNext())) {
+			text += node.data.substr(0, maxLength);
+			maxLength -= node.data.length;
+			selEndList.push(node);
+		}
+		return text;
+	},
 
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+	// Given a node which must not be null, returns either the next sibling or
+	// the next sibling of the father or the next sibling of the fathers father
+	// and so on or null
+	getNext: function(node) {
+		do {
+			if (node.nextSibling) return node.nextSibling;
+			node = node.parentNode;
+		} while ((node) && (inlineNames[node.nodeName]));
+		return null;
+	},
 
-	---
+	getTextFromRange: function(rangeParent, offset, selEndList, maxLength) {
+		if (rangeParent.ownerDocument.evaluate('boolean(parent::rp or ancestor::rt)',
+			rangeParent, null, XPathResult.BOOLEAN_TYPE, null).booleanValue)
+			return '';
 
-	Please do not change or remove any of the copyrights or links to web pages
-	when modifying any of the files.
+		if (rangeParent.nodeType != Node.TEXT_NODE)
+			return '';
 
-*/
+		let text = rangeParent.data.substr(offset, maxLength);
+		selEndList.push(rangeParent);
 
-/*
-  Rikaisama
-  Author:  Christopher Brochtrup
-  Contact: cb4960@gmail.com
-  Website: http://rikaisama.sourceforge.net/
-*/
+		var nextNode = rangeParent;
+		while ((text.length < maxLength) &&
+			((nextNode = this.getNext(nextNode)) != null) &&
+			(inlineNames[nextNode.nodeName])) {
+			text += this.getInlineText(nextNode, selEndList, maxLength - text.length);
+		}
+
+		return text;
+	},
+
+
+	getInlineTextPrev: function (node, selEndList, maxLength)
+  {
+		if((node.nodeType == Node.TEXT_NODE) && (node.data.length == 0))
+    {
+      return ''
+    }
+
+		let text = '';
+
+		let result = node.ownerDocument.evaluate('descendant-or-self::text()[not(parent::rp) and not(ancestor::rt)]',
+						     node, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+
+		while((text.length < maxLength) && (node = result.iterateNext()))
+    {
+      if(text.length + node.data.length >= maxLength)
+      {
+        text += node.data.substr(node.data.length - (maxLength - text.length), maxLength - text.length);
+      }
+      else
+      {
+			  text += node.data;
+      }
+
+			selEndList.push(node);
+		}
+
+		return text;
+	},
+
+
+	getPrev: function(node)
+  {
+		do
+    {
+			if (node.previousSibling)
+      {
+        return node.previousSibling;
+      }
+
+			node = node.parentNode;
+		}
+    while ((node) && (inlineNames[node.nodeName]));
+
+		return null;
+	},
+
+
+	getTextFromRangePrev: function(rangeParent, offset, selEndList, maxLength)
+  {
+		if (rangeParent.ownerDocument.evaluate('boolean(parent::rp or ancestor::rt)',
+			rangeParent, null, XPathResult.BOOLEAN_TYPE, null).booleanValue)
+    {
+			return '';
+    }
+
+		let text = '';
+		var prevNode = rangeParent;
+
+		while ((text.length < maxLength) &&
+			((prevNode = this.getPrev(prevNode)) != null) &&
+			(inlineNames[prevNode.nodeName]))
+    {
+      textTemp = text;
+      text = this.getInlineTextPrev(prevNode, selEndList, maxLength - text.length) + textTemp;
+		}
+
+		return text;
+	},
+	
+	// @param rp - The currently selected node
+	// @param ro - The position of the hilited text in the currently selected node
+	// @param selEndList - in/out, selection end data
+	getSentenceAround: function(rp, ro, selEndList) {
+		// The text from the currently selection node + 50 more characters from the next nodes
+		var sentence = textUtils.getTextFromRange(rp, 0, selEndList, rp.data.length + 50);
+
+		// 50 characters from the previous nodes.
+		// The above sentence var will stop at first ruby tag encountered to the
+		// left because it has a different node type. prevSentence will start where
+		// the above sentence left off moving to the left and will capture the ruby tags.
+		var prevSentence = textUtils.getTextFromRangePrev(rp, 0, selEndList, 50);
+
+		// Combine the full sentence text, including stuff that will be chopped off later.
+		sentence = prevSentence + sentence;
+		
+		//
+			// Find the sentence in the node
+		//
+
+		// Get the position of the first selected character in the sentence variable
+			i = ro + prevSentence.length;
+
+			var sentenceStartPos;
+			var sentenceEndPos;
+
+		// Find the last character of the sentence
+			while (i < sentence.length)
+			{
+				if (sentence[i] == "。" || sentence[i] == "\n" || sentence[i] == "？" ||　sentence[i] == "！")
+				{
+					sentenceEndPos = i;
+					break;
+				}
+				else if (i == (sentence.length - 1))
+				{
+					sentenceEndPos = i;
+				}
+
+				i++;
+			}
+
+			i = ro + prevSentence.length;
+
+
+			// Find the first character of the sentence
+			while (i >= 0)
+			{
+				if (sentence[i] == "。" || sentence[i] == "\n" || sentence[i] == "？" ||　sentence[i] == "！")
+				{
+					sentenceStartPos = i + 1;
+					break;
+				}
+				else if (i == 0)
+				{
+					sentenceStartPos = i;
+				}
+
+				i--;
+			}
+
+		// Extract the sentence
+			sentence = sentence.substring(sentenceStartPos, sentenceEndPos + 1);
+
+		var startingWhitespaceMatch = sentence.match(/^\s+/);
+
+		// Strip out control characters
+			sentence = sentence.replace(/[\n\r\t]/g, '');
+
+		var startOffset = 0;
+
+	   // Adjust offset of selected word according to the number of
+	   // whitespace chars at the beginning of the sentence
+	   if(startingWhitespaceMatch)
+	   {
+		 startOffset -= startingWhitespaceMatch[0].length;
+	   }
+
+		// Trim
+		sentence = textUtils.trim(sentence);
+
+		var wordPosInSentence = ro + prevSentence.length - sentenceStartPos + startOffset;
+				
+		return [sentence, wordPosInSentence];
+	},
+	
+	///////////////////////////////////////////////////////////
+	// trimming
+	
+	  // Trim whitespace from the beginning and end of text
+	  trim: function(text)
+	  {
+		return text.replace(/^\s\s*/, "").replace(/\s\s*$/, "");
+
+	  }, /* trim */
+
+
+	  // Trim whitespace from the end of text
+	  trimEnd: function(text)
+	  {
+		return text.replace(/\s\s*$/, "");
+
+	  }, /* trimEnd */
+};
+	
+const rcxMyData = {
+	wordSearch: function(word, noKanji) {
+		if (this.fake) {
+			dentry = '';
+			reason = "<polite";
+			return { data: [[dentry, reason]], matchLen: 3, more: 0, name: 0 };
+		}
+		else {
+			return rcxData.wordSearch(word, noKanji);
+		}
+	},
+	
+	// entry returned by wordSearch
+	makeHtml: function(entry) {
+		if (this.fake) {
+			return '<pre>So it is a window!</pre>'
+		} else {
+			return rcxData.makeHtml(entry);
+		}
+	},
+	
+	select: function(dictNumber) {
+		return rcxData.select(dictNumber);
+	},
+
+	loadConfig: function() {
+		rcxData.loadConfig();
+	},	
+	
+	// kanji dictionary number, rcxData.kanjiPos
+	kanjiPos: 0,
+	
+	// my data
+	fake: false,
+};
 
 var rcxMain = {
 	altView: 0,
 	enabled: 0,
 	sticky: false,
-	id: '{697F6AFE-5321-4DE1-BFE6-4471C3721BD4}',
-	version: null,
+	
   lastTdata: null,              // TData used for Sanseido mode and EPWING mode popup
-  sanseidoMode: false,          // Are we in Sanseido mode?
-  sanseidoReq: false,           // XML HTTP Request object for sanseido mode
-  sanseidoFallbackState: 0,     // 0 = Lookup with kanji form, 1 = Lookup with kana form
   superSticky: false,           // Are we in Super Sticky mode?
   superStickyOkayToShow: false, // Okay to show the popup in Super Sticky mode?
   superStickyOkayToHide: false, // Okay to hide the popup in Super Sticky mode?
-  epwingMode: false,            // Are we in EPWING mode?
-  epwingActive: false,          // Is the EPWING lookup in progress?
-  epwingTotalHits: 0,           // The total number of EPWING hits for the current word
-  epwingCurHit: 0,              // The current EPWING hit number (for showing hits one at a time)
-  epwingPrevHit: 0,             // The previous EPWING hit number
-  epwingCurDic: "",             // The EPWING dictionary to use (path)
-  prevEpwingSearchTerm: "",     // The previous search term used with EPWING mode
-  epwingFallbackCount: 0,       // How many times have we attempted to fallback to another EPWING dictionary?
-  epwingStartDic: "",           // The dictionary used for the original EPWING lookup (before any fallbacks)
-  epwingDicList: [],            // The list of EPWING dictionaries
-  epwingDicTitleList: [],       // The list of EPWING dictionary titles
-  saveKana: false,              // When saving a word, make the $d token equal to the $r token
-  autoPlayAudioTimer: null,     // Timer used for automatically playing audio when a word is hilited
-  epwingTimer: null,            // Timer used to lookup word in EPWING dictionary after word is hilited for a certain amount of time.
-  noAudioFileHash: "",          // The hash of the no no_audio.mp3
-  noAudioDic: null,             // Associative array containing words that have no audio clip. Key = "Reading - Expression.mp3", Value = true.
-  knownWordsDic: null,          // Associative array containing the user's known words
-  todoWordsDic: null,           // Associative array containing the user's to-do words
-  prevKnownWordsFilePath: "",   // Previous path of the known words file. Used to determine in the use changed the path in the options.
-  prevTodoWordsFilePath: "",    // Previous path of the to-do words file. Used to determine in the use changed the path in the options.
-  epwingSearchTerm: "",         // Text to lookup in EPWING dictionary
-  epwingSearchingNextLongest: false, // true = Searching for the next longest word in the gloss if the longest was not found.
-                                     //        For example, Kojien6 doesn't have 自由研究 (which is in EDICT) but it does have 自由,
-                                     //        so 自由 is used for the next longest search
-  epwingResultList: [],         // List of results from the previous EPWING search
-  freqDB: null,                 // Frequency database connection
-  pitchDB: null,                // Pitch accent database connection
-
-
-	global: function() {
-		return null;
-	},
-
-	rcxObs: {
-		observe: function(subject, topic, data) {
-			if (topic == 'rikaichan') {
-				if (data == 'getdic') {
-					rcxMain.showDownloadPage();
-					return;
-				}
-
-				if (data == 'dready') {
-					if (rcxMain.tabSelectPending) {
-						rcxMain.tabSelectPending = false;
-						rcxMain.onTabSelect();
-					}
-					return;
-				}
-
-			}
-		},
-		register: function() {
-		},
-		unregister: function() {
-		},
-		notifyState: function(state) {
-
-		}
-	},
-
 
 	init: function() {
 		window.addEventListener('load', function() { rcxMain._init() }, false);
 	},
 
 	_init: function() {
-		window.addEventListener('unload', function() { rcxMain.onUnload() }, false);
-
-   // getBrowser: function() { return document; }, // new
-    if (true) {
-			let docID = document.documentElement.id;
-
-			let mks = false ? (document.getElementById('mailKeys') || document.getElementById('editorKeys')) :
-						document.getElementById('mainKeyset') || document.getElementById('navKeys');
-			if (mks) {
-				let prefs = new rcxPrefs();
-				['toggle', 'lbar'].forEach(function(name) {
-					let s = prefs.getString(name + '.key');
-					if ((s.length) && (s != '(disabled)')) {
-						let key = document.createElementNS('http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul', 'key');
-						key.setAttribute('id', 'rikaichan-key-' + name);
-						if (s.length > 1) key.setAttribute('keycode', 'VK_' + s.replace(' ', '_').toUpperCase());	// "Page Up" -> "VK_PAGE_UP"
-							else key.setAttribute('key', s);
-						key.setAttribute('modifiers', prefs.getString(name + '.mod'));
-						key.setAttribute('command', 'rikaichan-' + name + '-cmd');
-						mks.appendChild(key);
-					}
-				});
-			}
-		}
-
-		this.rcxObs.register();
+		window.addEventListener('unload', function() { }, false);
 
 		rcxConfig.load();
-		rcxConfig.observer.start();
-
-		if (false) {
-		}
-		else {
-			this.getBrowser = function() { return document; }
-
-		//	gBrowser.mTabContainer.addEventListener('select', this.onTabSelect, false);
-		
 			// enmode: 0=tab, 1=browser, 2=all, 3=always
 		rcxConfig.enmode = 3;
-		if (rcxConfig.enmode >= 2) {
-				if ((rcxConfig.enmode == 3) || (this.global().rikaichanActive)) {
 					this.enabled = 1;
 					this.onTabSelect();
-				}
-			}
 
-			// add icon to the toolbar
-			try {
-				let prefs = new rcxPrefs();
-				if (prefs.getBool('firsticon')) {
-					prefs.setBool('firsticon', false);
-
-					// ref: https://developer.mozilla.org/En/Code_snippets:Toolbar#Adding_button_by_default
-					let nb = document.getElementById('nav-bar');
-					nb.insertItem('rikaichan-toggle-button');
-					nb.setAttribute('currentset', nb.currentSet);
-					document.persist(nb.id, 'currentset');
-				}
-			}
-			catch (ex) { }
-		}
-
-    // Enable Sticky Mode at startup based on user preference
-    if (rcxConfig.startsticky)
-    {
+		// Enable Sticky Mode at startup based on user preference
+		if (rcxConfig.startsticky)
+		{
 			rcxMain.sticky = true;
 		}
 
-    // Enable Super Sticky Mode at startup based on user preference
-    if (rcxConfig.startsupersticky)
-    {
+		// Enable Super Sticky Mode at startup based on user preference
+		if (rcxConfig.startsupersticky)
+		{
 			rcxMain.superSticky = true;
 		}
-
-
-
-	console.log('_init done');
+		console.log('_init done');
 	},
-
-	onUnload: function() {
-		this.rcxObs.unregister();
-		rcxConfig.observer.stop();
-	},
-
-	initDictionary: function() {
-		if (rcxData.missing) {
-			if (confirm('No dictionary file was found. Show the download page?')) {
-				this.showDownloadPage();
-			}
-			return false;
-		}
-		try {
-			rcxData.init();
-		}
-		catch (ex) {
-			alert('Error: ' + ex);
-			return false;
-		}
-		return true;
-	},
-
-	showDownloadPage: function() {
-	},
-
 
 	onTabSelect: function() {
-		// see rcxData.loadConfig
-		if ((rcxData.dicPath) && (!rcxData.dicPath.ready)) {
-			rcxMain.tabSelectPending = true;
-		}
-		else {
 			rcxMain._onTabSelect();
-		}
 	},
 
 	_onTabSelect: function() {
-		var bro = this.getBrowser();
+		var bro = document;
 
 		if (false) {
 		}
@@ -266,7 +382,7 @@ var rcxMain = {
 	},
 
 	showPopup: function(text, elem, pos, lbPop)
-  {
+   {
 	  //console.log(text, elem, pos, lbPop);
     try
     {
@@ -386,7 +502,7 @@ var rcxMain = {
         }
         else {
           // convert xy relative to outer-most document
-          var cb = this.getBrowser();
+          var cb = document;
           var bo = window;//cb.boxObject; <-- changed
           x -= bo.screenX;
           y -= bo.screenY;
@@ -447,56 +563,29 @@ var rcxMain = {
 	},
 
 	hidePopup: function()
-  {
-    // Reset the EPWING hit number and hit totals
-    this.epwingTotalHits = 0;
-    this.epwingCurHit = 0;
-    this.epwingPrevHit = 0;
-
-    // Don't hide popup in superSticky unless given permission to
-    if(!this.superSticky || this.superStickyOkayToHide)
     {
-      this.superStickyOkayToHide = false;
 
-		  var doc = window.content.document;
-		  var popup = doc.getElementById('rikaichan-window');
+		// Don't hide popup in superSticky unless given permission to
+		if(!this.superSticky || this.superStickyOkayToHide)
+		{
+		  this.superStickyOkayToHide = false;
 
-      if (popup)
-      {
-        popup.style.display = 'none';
-        popup.innerHTML = '';
+			  var doc = window.content.document;
+			  var popup = doc.getElementById('rikaichan-window');
 
-        // Stop the current auto play timer
-        if(rcxConfig.autoplayaudio)
-        {
-          if(this.autoPlayAudioTimer)
-          {
-            clearTimeout(this.autoPlayAudioTimer);
-            this.autoPlayAudioTimer = null;
-          }
-        }
+		  if (popup)
+		  {
+			popup.style.display = 'none';
+			popup.innerHTML = '';
+		  }
 
-        // Stop the EPWING timer
-        if(this.epwingTimer)
-        {
-          clearTimeout(this.epwingTimer);
-          this.epwingTimer = null;
-        }
-      }
-
-      this.lbPop = 0;
-      this.title = null;
-    }
-	},
-
-	isVisible: function() {
-		var doc = window.content.document;
-		var popup = doc.getElementById('rikaichan-window');
-		return (popup) && (popup.style.display != 'none');
+		  this.lbPop = 0;
+		  this.title = null;
+		}
 	},
 
 	clearHi: function() {
-		var tdata = this.getBrowser().rikaichan;
+		var tdata = document.rikaichan;
 		if ((!tdata) || (!tdata.prevSelView)) return;
 		if (tdata.prevSelView.closed) {
 			tdata.prevSelView = null;
@@ -512,372 +601,6 @@ var rcxMain = {
 		tdata.selText = null;
 	},
 
-	//
-
-	lastFound: null,
-
-	savePrep: function(clip, saveFormat) {
-		var me, mk;
-		var text;
-		var i;
-		var f;
-		var e;
-		var s;
-		var w;
-
-		f = this.lastFound;
-		s = this.sentence;
-		sWBlank = this.sentenceWBlank;
-		w = this.word;
-
-		if ((!f) || (f.length == 0)) return null;
-
-		if (clip) {
-			me = rcxConfig.smaxce;
-			mk = rcxConfig.smaxck;
-		}
-		else {
-			me = rcxConfig.smaxfe;
-			mk = rcxConfig.smaxfk;
-		}
-
-		if (!f.fromLB) mk = 1;
-
-		e = f[0];
-		text = rcxData.makeText(e, w, s, sWBlank, rcxMain.saveKana, saveFormat);
-
-    // Result the save kana ($d=$r) flag
-    rcxMain.saveKana = false;
-
-		if (rcxConfig.snlf == 1) text = text.replace(/\n/g, '\r\n');
-			else if (rcxConfig.snlf == 2) text = text.replace(/\n/g, '\r');
-
-		var sep = rcxConfig.ssep;
-		switch (sep) {
-		case 'Tab':
-			sep = '\t';
-			break;
-		case 'Comma':
-			sep = ',';
-			break;
-		case 'Space':
-			sep = ' ';
-			break;
-		}
-		if (sep != '\t') return text.replace(/\t/g, sep);
-
-		return text;
-	},
-
-	copyToClip: function() {
-		console.error('copyToClip not impelemented');
-		return;
-		var text;
-
-		if ((text = this.savePrep(1, rcxConfig.saveformat)) != null) {
-			Components.classes['@mozilla.org/widget/clipboardhelper;1']
-				.getService(Components.interfaces.nsIClipboardHelper)
-				.copyString(text);
-			this.showPopup('Copied to clipboard.');
-		} else {
-			this.showPopup('Please select something to copy in Preferences.');
-			return;
-		}
-	},
-
-
-  /* Get the CSS style to use when drawing the provided frequency */
-  getFreqStyle: function(inFreqNum)
-  {
-    freqNum = inFreqNum.replace(/_r/g, "");
-
-    var freqStyle = 'w-freq-rare';
-
-    if (freqNum <= 5000)
-    {
-      freqStyle = "w-freq-very-common";
-    }
-    else if (freqNum <= 10000)
-    {
-      freqStyle = "w-freq-common";
-    }
-    else if (freqNum <= 20000)
-    {
-      freqStyle = "w-freq-uncommon";
-    }
-
-    return freqStyle;
-
-  }, /* getFreqStyle */
-
-
-  /* Get the frequency for the given expression/reading. If the frequency is based on the
-     reading then "_r" is appended to the frequency string that is returned.
-
-     useHilitedWord - Set to true to allow the hilited word to be considered when
-                      determining frequency.
-
-     Note: frequency information comes from analysis of 5000+ novels (via
-           Japanese Text Analysis Tool). */
-  getFreq: function(inExpression, inReading, useHilitedWord)
-  {
-    var expression = inExpression;
-    var reading = inReading;
-    var hilitedWord = this.word; // Hilited word without de-inflection
-
-    var freqNum = "";
-    var freqStr = "";
-    var freqBasedOnReading = false;
-
-    try
-    {
-      var readingFreqNum = this.lookupFreqInDb(reading);
-      var readingSameAsExpression = (expression == reading);
-      var expressionFreqNum = readingFreqNum;
-
-      // Don't waste time looking up the expression freq if expression is same as the reading
-      if(!readingSameAsExpression)
-      {
-        expressionFreqNum = this.lookupFreqInDb(expression);
-      }
-
-      // If frequency was found for either frequency or reading
-      if((expressionFreqNum.length > 0) || (readingFreqNum.length > 0))
-      {
-        // If the hilited word does not contain kanji, and the reading is unique,
-        // use the reading frequency
-        if(useHilitedWord
-            && !readingSameAsExpression
-            && !this.containsKanji(hilitedWord)
-            && (readingFreqNum.length > 0)
-            && (rcxData.getReadingCount(reading) == 1))
-        {
-          freqNum = readingFreqNum;
-          freqBasedOnReading = true;
-        }
-
-        // If expression and reading are the same, use the reading frequency
-        if((freqNum.length == 0)
-            && readingSameAsExpression
-            && (readingFreqNum.length > 0))
-        {
-          freqNum = readingFreqNum;
-        }
-
-        // If the expression is in the freq db, use the expression frequency
-        if((freqNum.length == 0) && (expressionFreqNum.length > 0))
-        {
-          freqNum = expressionFreqNum;
-        }
-
-        // If the reading is in the freq db, use the the reading frequency
-        if((freqNum.length == 0) && (readingFreqNum.length > 0))
-        {
-          freqNum = readingFreqNum;
-          freqBasedOnReading = true;
-        }
-      }
-
-      freqStr = freqNum;
-
-      // Indicate that frequency was based on the reading
-      if(freqBasedOnReading)
-      {
-        freqStr += "_r";
-      }
-    }
-    catch(ex)
-    {
-      console.error("getFreq() Exception: " + ex);
-      freqStr = "";
-    }
-
-    return freqStr;
-
-  }, /* getFreq */
-
-
-  /* Lookup the provided word in the frequency database. */
-  lookupFreqInDb: function(word)
-  {
-	  console.error('lookupFreqInDb not implemented' );
-	  return 0;
-    var freq = "";
-
-    try
-    {
-      // If we have not yet made a connection to the database
-      if(this.freqDB == null)
-      {
-        // Get the path of the frequency database
-        var freqDbPath = Components.classes["@mozilla.org/file/directory_service;1"]
-        .getService(Components.interfaces.nsIProperties)
-        .get("ProfD", Components.interfaces.nsILocalFile);
-        freqDbPath.append("extensions");
-        freqDbPath.append(rcxMain.id); // GUID of extension
-        freqDbPath.append("freq");
-        freqDbPath.append("freq.sqlite");
-
-        // Is the frequency database could not be found, return
-        if(!freqDbPath.exists())
-        {
-          return "";
-        }
-
-        // Get file pointer to the frequency sqlite database
-        var freqDbFile = Components.classes['@mozilla.org/file/local;1']
-         .createInstance(Components.interfaces.nsILocalFile);
-        freqDbFile.initWithPath(freqDbPath.path);
-
-        // Open the frequency database
-        this.freqDB = Components.classes['@mozilla.org/storage/service;1']
-         .getService(Components.interfaces.mozIStorageService)
-         .openDatabase(freqDbFile);
-      }
-
-      // Reference: https://developer.mozilla.org/en-US/docs/Storage
-      var stFreq = this.freqDB.createStatement(
-        "SELECT freq FROM Dict WHERE expression='" + word + "'");
-
-      try
-      {
-        var freqFound = stFreq.executeStep();
-
-        if(freqFound)
-        {
-          freq = stFreq.row.freq;
-        }
-      }
-      finally
-      {
-        stFreq.reset();
-      }
-    }
-    catch(ex)
-    {
-      console.error("lookupFreqInDb() Exception: " + ex);
-      freq = "";
-    }
-
-    return freq;
-
-  }, /* lookupFreqInDb */
-
-
-
-  /* Get the pitch accent of the last hilited word if present. If inExpression is not provided,
-     will get the pitch accent for the hilited word's expression and reading */
-  getPitchAccent: function(inExpression, inReading)
-  {
-	  console.error('getPitchAccent not implemented' );
-	  return "";
-    try
-    {
-      // If we have not yet made a connection to the database
-      if(this.pitchDB == null)
-      {
-        // Get the path of the pitch accent database
-        var pitchDbPath = Components.classes["@mozilla.org/file/directory_service;1"]
-        .getService(Components.interfaces.nsIProperties)
-        .get("ProfD", Components.interfaces.nsILocalFile);
-        pitchDbPath.append("extensions");
-        pitchDbPath.append(rcxMain.id); // GUID of extension
-        pitchDbPath.append("pitch");
-        pitchDbPath.append("pitch_accents.sqlite");
-
-        // Is the pitch accent database could not be found, return
-        if(!pitchDbPath.exists())
-        {
-          return "";
-        }
-
-        // Get file pointer to the pitch accent sqlite database
-        var pitchDbFile = Components.classes['@mozilla.org/file/local;1']
-         .createInstance(Components.interfaces.nsILocalFile);
-        pitchDbFile.initWithPath(pitchDbPath.path);
-
-        // Open the pitch accent database
-        this.pitchDB = Components.classes['@mozilla.org/storage/service;1']
-         .getService(Components.interfaces.mozIStorageService)
-         .openDatabase(pitchDbFile);
-      }
-
-      // If the caller provided an expression/reading, use them, otherwise use the
-      // expression/reading of the hilited word
-      if(inExpression)
-      {
-        var expression = inExpression;
-        var reading = inReading;
-      }
-      else
-      {
-        var hilitedEntry = this.lastFound;
-
-        if ((!hilitedEntry) || (hilitedEntry.length == 0)
-          || !hilitedEntry[0] || !hilitedEntry[0].data[0])
-        {
-          return "";
-        }
-
-        var entryData = hilitedEntry[0].data[0][0].match(/^(.+?)\s+(?:\[(.*?)\])?\s*\/(.+)\//);
-
-        //   entryData[0] = kanji/kana + kana + definition
-        //   entryData[1] = kanji (or kana if no kanji)
-        //   entryData[2] = kana (null if no kanji)
-        //   entryData[3] = definition
-
-        var expression = entryData[1];
-        var reading = entryData[2];
-      }
-
-      // Form the SQL used to query the pitch accent
-      if(!reading)
-      {
-        // Reference: https://developer.mozilla.org/en-US/docs/Storage
-        var stPitch = this.pitchDB.createStatement("SELECT pitch FROM Dict WHERE expression='"
-          + expression + "'");
-      }
-      else
-      {
-        var stPitch = this.pitchDB.createStatement("SELECT pitch FROM Dict WHERE expression='"
-          + expression + "' AND reading='" + reading + "'");
-      }
-
-      var pitch = "";
-
-      try
-      {
-        stPitch.executeStep();
-
-        // Get the result of the query
-        pitch = stPitch.row.pitch;
-      }
-      finally
-      {
-        stPitch.reset();
-      }
-
-      // If user wants to hide the part-of-speech unless , or | is present
-      if(rcxConfig.hidepitchaccentpos)
-      {
-        if((pitch.indexOf(",") == -1) && (pitch.indexOf("|") == -1))
-        {
-          pitch = pitch.replace(/\(.*?\)/g, "")
-        }
-      }
-
-      return pitch;
-    }
-    catch(ex)
-    {
-      return "";
-    }
-
-    return "";
-
-  }, /* getPitchAccent */
-
-
   /*
    Returns:
      "*"    - If expression of last hilighted word is in the user's known words list.
@@ -891,109 +614,7 @@ var rcxMain = {
     return "[t] "
   }, /* getKnownWordIndicatorText */
 
-  // If in Super Sticky mode, allow the popup to show just once
-  allowOneTimeSuperSticky: function()
-  {
-    if(this.superSticky)
-    {
-      this.superStickyOkayToShow = true;
-    }
 
-  }, /* allowOneTimeSuperSticky */
-
-
-  // Toggle Super Sticky mode
-  toggleSuperStickyMode: function()
-  {
-    this.superSticky = !this.superSticky;
-
-
-
-  }, /* toggleSuperStickyMode */
-
-
-  // Toggle EPWING mode
-  toggleEpwingMode: function()
-  {
-  }, /* toggleEpwingMode */
-
-
-  // Toggle Sanseido mode
-  toggleSanseidoMode: function()
-  {
-
-  }, /* toggleSanseidoMode */
-
-
-  // Parse definition from Sanseido page and display it in a popup
-  parseAndDisplaySanseido: function(entryPageText)
-  {
-
-  }, /* parseAndDisplaySanseido */
-
-
- 
-
-  // Perform cleanup and reset variables after performing an EPWING search
-  cleanupLookupEpwing: function()
-  {
-  }, /* cleanupLookupEpwing */
-
-
-  // Lookup hilited word in EPWING dictionary
-  lookupEpwing: function()
-  {
-	 
-  }, /* lookupEpwing */
-
-
-  // Callback that will be called when the rcxEpwing.lookupWords() function in lookupEpwing() is
-  // complete. It saves the EPWING results to rcxMain.epwingResultList. If no results are found,
-  // it will fallback. If results are found, it will show a popup containing the results.
-  lookupEpwingPart2: function(resultList)
-  {
- 
-
-  }, /* lookupEpwingPart2 */
-
-
-  // Fetch entry page from sanseido, parse out definition and display
-	lookupSanseido: function()
-  {
-   
-  }, /* lookupSanseido */
-
-  // Does the provided text contain a kanji?
-  containsKanji: function(text)
-  {
-    for (i = 0; i < text.length; i++)
-    {
-      c = text[i];
-
-      if((c >= '\u4E00') && (c <= '\u9FBF'))
-      {
-        return true;
-      }
-    }
-
-    return false;
-  },
-
-
-  // Trim whitespace from the beginning and end of text
-  trim: function(text)
-  {
-    return text.replace(/^\s\s*/, "").replace(/\s\s*$/, "");
-
-  }, /* trim */
-
-
-  // Trim whitespace from the end of text
-  trimEnd: function(text)
-  {
-    return text.replace(/\s\s*$/, "");
-
-  }, /* trimEnd */
 
 
 	onMouseUp: function(ev)
@@ -1017,217 +638,48 @@ var rcxMain = {
 
 
 	onMouseDown: function(ev)
-  {
-    // Did a Ctrl-click or Alt-click just occur in Super Sticky mode?
-    if(rcxMain.superSticky && (ev.ctrlKey || ev.altKey))
     {
-      // Prevent the surrounding table element from hiliting when the user
-      // performs a ctrl-left click
-      if(ev.button == 0)
-      {
-        ev.preventDefault();
-      }
+		// Did a Ctrl-click or Alt-click just occur in Super Sticky mode?
+		if(rcxMain.superSticky && (ev.ctrlKey || ev.altKey))
+		{
+		  // Prevent the surrounding table element from hiliting when the user
+		  // performs a ctrl-left click
+		  if(ev.button == 0)
+		  {
+			ev.preventDefault();
+		  }
 
-      let tdata = ev.currentTarget.rikaichan;
+		  let tdata = ev.currentTarget.rikaichan;
 
-      rcxMain.superStickyOkayToShow = true;
+		  rcxMain.superStickyOkayToShow = true;
 
-      if(tdata)
-      {
-        if (tdata.titleShown)
-        {
-          rcxMain.showTitle(tdata);
-        }
-        else
-        {
-          rcxMain.show(tdata);
-        }
-      }
-    }
-    else if(!rcxMain.cursorInPopup(ev))
-    {
-      rcxMain.superStickyOkayToHide = true;
-      rcxMain.hidePopup();
-    }
+		  if(tdata)
+		  {
+			if (tdata.titleShown)
+			{
+			}
+			else
+			{
+			  rcxMain.show(tdata);
+			}
+		  }
+		}
+		else if(!rcxMain.cursorInPopup(ev))
+		{
+		  rcxMain.superStickyOkayToHide = true;
+		  rcxMain.hidePopup();
+		}
 	},
-
-
-	inlineNames: {
-		// text node
-		'#text': true,
-
-		// font style
-		'FONT': true,
-		'TT': true,
-		'I' : true,
-		'B' : true,
-		'BIG' : true,
-		'SMALL' : true,
-		//deprecated
-		'STRIKE': true,
-		'S': true,
-		'U': true,
-
-		// phrase
-		'EM': true,
-		'STRONG': true,
-		'DFN': true,
-		'CODE': true,
-		'SAMP': true,
-		'KBD': true,
-		'VAR': true,
-		'CITE': true,
-		'ABBR': true,
-		'ACRONYM': true,
-
-		// special, not included IMG, OBJECT, BR, SCRIPT, MAP, BDO
-		'A': true,
-		'Q': true,
-		'SUB': true,
-		'SUP': true,
-		'SPAN': true,
-		'WBR': true,
-
-		// ruby
-		'RUBY': true,
-		'RBC': true,
-		'RTC': true,
-		'RB': true,
-		'RT': true,
-		'RP': true,
-
-    // User configurable elements
-    'DIV': false,
-	},
-
 
   // Configure this.inlineNames based on user settings.
   configureInlineNames: function()
   {
-    this.inlineNames["DIV"] = rcxConfig.mergedivs;
+    inlineNames["DIV"] = rcxConfig.mergedivs;
 
   }, /* configureInlineNames */
 
 
-	// Gets text from a node and returns it
-	// node: a node
-	// selEnd: the selection end object will be changed as a side effect
-	// maxLength: the maximum length of returned string
-	getInlineText: function (node, selEndList, maxLength) {
-		if ((node.nodeType == Node.TEXT_NODE) && (node.data.length == 0)) return ''
 
-		let text = '';
-		let result = node.ownerDocument.evaluate('descendant-or-self::text()[not(parent::rp) and not(ancestor::rt)]',
-						node, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
-		while ((maxLength > 0) && (node = result.iterateNext())) {
-			text += node.data.substr(0, maxLength);
-			maxLength -= node.data.length;
-			selEndList.push(node);
-		}
-		return text;
-	},
-
-	// Given a node which must not be null, returns either the next sibling or
-	// the next sibling of the father or the next sibling of the fathers father
-	// and so on or null
-	getNext: function(node) {
-		do {
-			if (node.nextSibling) return node.nextSibling;
-			node = node.parentNode;
-		} while ((node) && (this.inlineNames[node.nodeName]));
-		return null;
-	},
-
-	getTextFromRange: function(rangeParent, offset, selEndList, maxLength) {
-		if (rangeParent.ownerDocument.evaluate('boolean(parent::rp or ancestor::rt)',
-			rangeParent, null, XPathResult.BOOLEAN_TYPE, null).booleanValue)
-			return '';
-
-		if (rangeParent.nodeType != Node.TEXT_NODE)
-			return '';
-
-		let text = rangeParent.data.substr(offset, maxLength);
-		selEndList.push(rangeParent);
-
-		var nextNode = rangeParent;
-		while ((text.length < maxLength) &&
-			((nextNode = this.getNext(nextNode)) != null) &&
-			(this.inlineNames[nextNode.nodeName])) {
-			text += this.getInlineText(nextNode, selEndList, maxLength - text.length);
-		}
-
-		return text;
-	},
-
-
-	getInlineTextPrev: function (node, selEndList, maxLength)
-  {
-		if((node.nodeType == Node.TEXT_NODE) && (node.data.length == 0))
-    {
-      return ''
-    }
-
-		let text = '';
-
-		let result = node.ownerDocument.evaluate('descendant-or-self::text()[not(parent::rp) and not(ancestor::rt)]',
-						     node, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
-
-		while((text.length < maxLength) && (node = result.iterateNext()))
-    {
-      if(text.length + node.data.length >= maxLength)
-      {
-        text += node.data.substr(node.data.length - (maxLength - text.length), maxLength - text.length);
-      }
-      else
-      {
-			  text += node.data;
-      }
-
-			selEndList.push(node);
-		}
-
-		return text;
-	},
-
-
-	getPrev: function(node)
-  {
-		do
-    {
-			if (node.previousSibling)
-      {
-        return node.previousSibling;
-      }
-
-			node = node.parentNode;
-		}
-    while ((node) && (this.inlineNames[node.nodeName]));
-
-		return null;
-	},
-
-
-	getTextFromRangePrev: function(rangeParent, offset, selEndList, maxLength)
-  {
-		if (rangeParent.ownerDocument.evaluate('boolean(parent::rp or ancestor::rt)',
-			rangeParent, null, XPathResult.BOOLEAN_TYPE, null).booleanValue)
-    {
-			return '';
-    }
-
-		let text = '';
-		var prevNode = rangeParent;
-
-		while ((text.length < maxLength) &&
-			((prevNode = this.getPrev(prevNode)) != null) &&
-			(this.inlineNames[prevNode.nodeName]))
-    {
-      textTemp = text;
-      text = this.getInlineTextPrev(prevNode, selEndList, maxLength - text.length) + textTemp;
-		}
-
-		return text;
-	},
 
 
 	highlightMatch: function(doc, rp, ro, matchLen, selEndList, tdata) {
@@ -1298,94 +750,19 @@ var rcxMain = {
 			return -2;
 		}
 
-    // Configure this.inlineNames based on user settings
-    this.configureInlineNames();
+		// Configure this.inlineNames based on user settings
+		this.configureInlineNames();
 
 		//selection end data
 		var selEndList = [];
 
     // The text here will be used to lookup the word
-		var text = this.getTextFromRange(rp, ro, selEndList, 20);
+		var text = textUtils.getTextFromRange(rp, ro, selEndList, 20);
 	//	console.log(text);
 
-    // The text from the currently selection node + 50 more characters from the next nodes
-		var sentence = this.getTextFromRange(rp, 0, selEndList, rp.data.length + 50);
-
-    // 50 characters from the previous nodes.
-    // The above sentence var will stop at first ruby tag encountered to the
-    // left because it has a different node type. prevSentence will start where
-    // the above sentence left off moving to the left and will capture the ruby tags.
-    var prevSentence = this.getTextFromRangePrev(rp, 0, selEndList, 50);
-
-    // Combine the full sentence text, including stuff that will be chopped off later.
-    sentence = prevSentence + sentence;
-
-		//this.word = text;
-
-    //
-		// Find the sentence in the node
-    //
-
-    // Get the position of the first selected character in the sentence variable
-		i = ro + prevSentence.length;
-
-		var sentenceStartPos;
-		var sentenceEndPos;
-
-    // Find the last character of the sentence
-		while (i < sentence.length)
-    {
-			if (sentence[i] == "。" || sentence[i] == "\n" || sentence[i] == "？" ||　sentence[i] == "！")
-      {
-				sentenceEndPos = i;
-				break;
-			}
-      else if (i == (sentence.length - 1))
-      {
-				sentenceEndPos = i;
-			}
-
-			i++;
-		}
-
-		i = ro + prevSentence.length;
-
-
-    // Find the first character of the sentence
-		while (i >= 0)
-    {
-			if (sentence[i] == "。" || sentence[i] == "\n" || sentence[i] == "？" ||　sentence[i] == "！")
-      {
-				sentenceStartPos = i + 1;
-				break;
-			}
-      else if (i == 0)
-      {
-				sentenceStartPos = i;
-			}
-
-			i--;
-		}
-
-    // Extract the sentence
-		sentence = sentence.substring(sentenceStartPos, sentenceEndPos + 1);
-
-    var startingWhitespaceMatch = sentence.match(/^\s+/);
-
-    // Strip out control characters
-		sentence = sentence.replace(/[\n\r\t]/g, '');
-
-    var startOffset = 0;
-
-   // Adjust offset of selected word according to the number of
-   // whitespace chars at the beginning of the sentence
-   if(startingWhitespaceMatch)
-   {
-     startOffset -= startingWhitespaceMatch[0].length;
-   }
-
-    // Trim
-    sentence = rcxMain.trim(sentence);
+		result = textUtils.getSentenceAround(rp, ro, selEndList);
+		var sentence = result[0];
+		var wordPosInSentence = result[1];
 
 		this.sentence = sentence;
 
@@ -1395,19 +772,16 @@ var rcxMain = {
 			return 0;
 		}
 
-		var e = rcxData.wordSearch(text);
+		var e = rcxMyData.wordSearch(text);
 		if (e == null) {
 			this.hidePopup();
 			this.clearHi();
 			//console.log('exit because wordSearch return null for text: ' + text);
 			return 0;
 		}
-		this.lastFound = [e];
 
     // Find the highlighted word, rather than the JMDICT lookup
 		this.word = text.substring(0, e.matchLen);
-
-		var wordPosInSentence = ro + prevSentence.length - sentenceStartPos + startOffset;
 
     // Add blanks in place of the hilited word for use with the save feature
 		sentenceWBlank = sentence.substring(0, wordPosInSentence) + "___"
@@ -1436,61 +810,17 @@ var rcxMain = {
     // Save the tdata so that the sanseido routines can use it
     this.lastTdata = tdata; //Components.utils.getWeakReference(tdata);
 
-    // When auto play is enabled, the user must hilite a word for at least 500 ms before
-    // the audio will be played.
-    if(rcxConfig.autoplayaudio)
-    {
-      if(this.autoPlayAudioTimer)
-      {
-        clearTimeout(this.autoPlayAudioTimer);
-        this.autoPlayAudioTimer = null;
-      }
-
-      this.autoPlayAudioTimer = setTimeout(function() { rcxMain.playJDicAudio(false) }, 500);
-    }
-
     // If not in Super Sticky mode or the user manually requested a popup
     if(!this.superSticky || this.superStickyOkayToShow)
     {
 		//console.log('ssshow')
       // Clear the one-time okay-to-show flag
       this.superStickyOkayToShow = false;
-
-      // If we are in sanseido mode and the normal non-names, non-kanji dictionary is selected
-      if(this.sanseidoMode
-        && (rcxData.dicList[rcxData.selected].name.indexOf("Names") == -1)
-        && (rcxData.dicList[rcxData.selected].name.indexOf("Kanji") == -1))
-      {
-        this.sanseidoFallbackState = 0; // 0 = Lookup with kanji form (if applicable)
-        this.lookupSanseido();
-      }
-      // If we are in EPWING mode and the normal non-names, non-kanji dictionary is selected
-      else if(this.epwingMode
-        && (rcxData.dicList[rcxData.selected].name.indexOf("Names") == -1)
-        && (rcxData.dicList[rcxData.selected].name.indexOf("Kanji") == -1))
-      {
-        if(this.epwingTimer)
-        {
-          clearTimeout(this.epwingTimer);
-          this.epwingTimer = null;
-        }
-
-        // The user must hilite a word for at least 100 ms before the lookup will occur
-        this.epwingTimer = setTimeout(function() { rcxMain.lookupEpwing() }, 0);
-      }
-      // Normal popup
-      else
-      {
-		 // console.log(rcxData.makeHtml(e))
-        this.showPopup(rcxMain.getKnownWordIndicatorText() + rcxData.makeHtml(e), tdata.prevTarget, tdata.pos);
-      }
+		 // console.log(rcxMyData.makeHtml(e))
+        this.showPopup(rcxMain.getKnownWordIndicatorText() + rcxMyData.makeHtml(e), tdata.prevTarget, tdata.pos);
     }
 
 		return 1;
-	},
-
-
-	showTitle: function(tdata) {
 	},
 
 	onMouseMove: function(ev) { rcxMain._onMouseMove(ev); },
@@ -1498,16 +828,7 @@ var rcxMain = {
 		var tdata = ev.currentTarget.rikaichan;	// per-tab data
 		var rp = ev.rangeParent;
 		var ro = ev.rangeOffset;
-
-/*
-		var cb = this.getBrowser();
-		var bbo = cb.boxObject;
-		var z = cb.markupDocumentViewer ? cb.markupDocumentViewer.fullZoom : 1;
-		var y = (ev.screenY - bbo.screenY);
-		this.status('sy=' + ev.screenY + ' z=' + z +
-			' bsy=' + bbo.screenY + ' y=' + y + ' y/z=' + Math.round(y / z));
-*/
-		
+	
 		if ((this.sticky) && (this.cursorInPopup(ev))) {
 			clearTimeout(tdata.timer);
 			tdata.timer = null;
@@ -1540,7 +861,7 @@ var rcxMain = {
 		if (this.lbPop) return;
 
 		if ((rp) && (rp.data) && (ro < rp.data.length)) {
-			rcxData.select(ev.shiftKey ? rcxData.kanjiPos : 0);
+			rcxMyData.select(ev.shiftKey ? rcxMyData.kanjiPos : 0);
 			//	tdata.pos = ev;
 			tdata.pos = { screenX: ev.screenX, screenY: ev.screenY, pageX: ev.pageX, pageY: ev.pageY };
 			tdata.timer = setTimeout(function() { rcxMain.show(tdata) }, rcxConfig.popdelay);
@@ -1566,7 +887,7 @@ var rcxMain = {
 		if (tdata.title) {
 			//	tdata.pos = ev;
 			tdata.pos = { screenX: ev.screenX, screenY: ev.screenY, pageX: ev.pageX, pageY: ev.pageY };
-			tdata.timer = setTimeout(function() { rcxMain.showTitle(tdata) }, rcxConfig.popdelay);
+			tdata.timer = setTimeout(function() {  }, rcxConfig.popdelay);
 			return;
 		}
 
@@ -1599,7 +920,7 @@ var rcxMain = {
 			b.rikaichan = {};
 			b.addEventListener('mousemove', this.onMouseMove, false);
 			b.addEventListener('mousedown', this.onMouseDown, false);
-      b.addEventListener('mouseup', this.onMouseUp, false);
+			b.addEventListener('mouseup', this.onMouseUp, false);
 			b.addEventListener('keydown', this.onKeyDown, true);
 			b.addEventListener('keyup', this.onKeyUp, true);
 			return true;
@@ -1608,7 +929,6 @@ var rcxMain = {
 	},
 
 	enable: function(b, mode) {
-		//if (!this.initDictionary()) return;
 		var ok = this._enable(b, mode);
 
 
@@ -1616,131 +936,24 @@ var rcxMain = {
 			if (mode == 1) {
 				if (rcxConfig.enmode > 0) {
 					this.enabled = 1;
-					if (rcxConfig.enmode == 2) {
-						this.global().rikaichanActive = true;
-						this.rcxObs.notifyState('enable');
-					}
 				}
  
 			}
 		}
 	},
 
-
-
-	getSelected: function(win) {
-		var text;
-		var s = win.getSelection()
-		if (s) {
-			text = s.toString();
-			if (text.search(/[^\s]/) != -1) return text;
-		}
-		for (var i = 0; i < win.frames.length; ++i) {
-			text = this.getSelected(win.frames[i]);
-			if (text.length > 0) return text;
-		}
-		return '';
-	},
-
-	clearSelected: function(win) {
-		var s = win.getSelection();
-		if (s) s.removeAllRanges();
-		for (var i = 0; i < win.frames.length; ++i) {
-			this.clearSelected(win.frames[i]);
-		}
-	},
-
-
-  // Perform lookup bar search
-	lookupSearch: function(text) {
-		let s = text.replace(/^\s+|\s+$/g, '');
-		if (!s.length) return;
-
-		if ((this.lbLast == s) && (this.isVisible())) {
-			rcxData.selectNext();
-		}
-		else {
-			this.lbLast = s;
-			rcxData.select(0);
-		}
-
-		if ((s.length == 0) || (!this.initDictionary())) {
-			this.hidePopup();
-		}
-		else {
-			let result;
-			let html;
-			if ((s.search(/^:/) != -1) || (s.search(/^([^\u3000-\uFFFF]+)$/) != -1)) {
-				// ":word"  = force a text search of "word"
-				result = rcxData.textSearch(s.replace(/^:/, ''));
-			}
-			else {
-				result = rcxData.wordSearch(s, true);
-			}
-			if (result) {
-				html = rcxData.makeHtml(result);
-				this.lastFound = [result];
-			}
-			else {
-				html = '\u300C ' + s + ' \u300D was not found.';
-				this.lastFound = [];
-			}
-			this.lastFound.fromLB = 1;
-
-			let kanji = '';
-			let have = {};
-			let t = s + html;
-			for (let i = 0; i < t.length; ++i) {
-				let c = t.charCodeAt(i);
-				if ((c >= 0x3000) && (c <= 0xFFFF)) {
-					c = t.charAt(i);
-					if (!have[c]) {
-						result = rcxData.kanjiSearch(c);
-						if (result) {
-							this.lastFound.push(result);
-							have[c] = 1;
-							kanji += '<td class="q-k">' + rcxData.makeHtml(result) + '</td>';
-						}
-					}
-				}
-			}
-
-			this.showPopup('<table class="q-tb"><tr><td class="q-w">' + this.getKnownWordIndicatorText()
-        + html + '</td>' + kanji + '</tr></table>', null, null, true);
-		}
-	},
-
-	statusTimer: null,
-
 };
-
-/*
-var rcxLookupBar = {
-};
-*/
 
 var rcxConfig = {
 	observer: {
 		observe: function(subject, topic, data) {
 			rcxConfig.load();
 		},
-		start: function() {
-		},
-		stop: function() {
-		}
+
 	},
 
 	load: function() {
 		let p = new rcxPrefs();
-
-		// fix 1.xx -> 2.xx
-		try {
-			if (p.branch.getPrefType('wpos') != p.branch.PREF_BOOL) {
-				p.branch.clearUserPref('wpos');
-			}
-		}
-		catch (ex) {
-		}
 
 		for (let i = rcxConfigList.length - 1; i >= 0; --i) {
 			let [type, name] = rcxConfigList[i];
@@ -1782,7 +995,7 @@ var rcxConfig = {
 			if (e) e.hidden = true;
 		}
 
-		rcxData.loadConfig();
+		rcxMyData.loadConfig();
 
 	}
 };
